@@ -115,21 +115,25 @@ schedule.every().sunday.at("23:00").do(backup_weekly) # Sunday 02:00 MSK
 
 log("Backup scheduler started")
 
-# HTTP status server
+# Status server for reverse proxy setup
 class StatusHandler(BaseHTTPRequestHandler):
 	def do_GET(self):
+		if self.path != "/":
+			self.send_response(404)
+			self.end_headers()
+			return
 		self.send_response(200)
-		self.send_header('Content-type', 'text/plain; charset=utf-8')
+		self.send_header("Content-type", "text/plain; charset=utf-8")
 		self.end_headers()
-		output = "Backup Status Log (MSK):\n\n" + "\n".join(last_backup_logs)
-		self.wfile.write(output.encode('utf-8'))
+		self.wfile.write("Backup Status Log (MSK):\n\n".encode("utf-8"))
+		self.wfile.write("\n".join(last_backup_logs).encode("utf-8"))
 
-def start_status_server():
-	srv = HTTPServer(('0.0.0.0', 8080), StatusHandler)
-	log("Status server running on port 8080")
-	srv.serve_forever()
+def start_web_server():
+	server = HTTPServer(("127.0.0.1", 8080), StatusHandler)
+	log("Web status server running on 127.0.0.1:8080 (behind reverse proxy)")
+	server.serve_forever()
 
-threading.Thread(target=start_status_server, daemon=True).start()
+threading.Thread(target=start_web_server, daemon=True).start()
 
 while True:
 	schedule.run_pending()

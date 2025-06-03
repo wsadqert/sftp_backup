@@ -4,6 +4,8 @@ import time
 import os
 import pytz
 import shutil
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from backup import backup
 
 MSK = pytz.timezone("Europe/Moscow")
@@ -14,6 +16,8 @@ RETENTION_HOURS = {
 	"daily": 3 * 24,
 	"weekly": 2 * 7 * 24
 }
+
+last_backup_logs = []
 
 def now_msk():
 	return datetime.datetime.now(MSK)
@@ -30,7 +34,12 @@ def make_path(tier: str) -> str:
 	return f"./backups/{tier}/{name}"
 
 def log(msg):
-	print(f"[{now_msk().strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
+	timestamp = now_msk().strftime('%Y-%m-%d %H:%M:%S')
+	full_msg = f"[{timestamp}] {msg}"
+	print(full_msg)
+	last_backup_logs.append(full_msg)
+	if len(last_backup_logs) > 50:
+		del last_backup_logs[0]
 
 def backup_with_log(tier):
 	path = make_path(tier)
@@ -105,6 +114,22 @@ schedule.every().day.at("23:00").do(backup_daily)     # 02:00 MSK
 schedule.every().sunday.at("23:00").do(backup_weekly) # Sunday 02:00 MSK
 
 log("Backup scheduler started")
+
+# HTTP status server
+class StatusHandler(BaseHTTPRequestHandler):
+	def do_GET(self):
+		self.send_response(200)
+		self.send_header('Content-type', 'text/plain; charset=utf-8')
+		self.end_headers()
+		output = "Backup Status Log (MSK):\n\n" + "\n".join(last_backup_logs)
+		self.wfile.write(output.encode('utf-8'))
+
+def start_status_server():
+	srv = HTTPServer(('0.0.0.0', 8080), StatusHandler)
+	log("Status server running on port 8080")
+	srv.serve_forever()
+
+threading.Thread(target=start_status_server, daemon=True).start()
 
 while True:
 	schedule.run_pending()

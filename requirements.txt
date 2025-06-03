@@ -1,0 +1,4 @@
+schedule
+pytz
+paramiko
+python-dotenv
